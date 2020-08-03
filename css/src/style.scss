@@ -782,10 +782,9 @@ $blue_due: #4271a6;			// due dates and low importance
 }
 
 /**
-	* rules for app-sidebar
-	*/
-
-#app-sidebar {
+* rules for app-sidebar
+*/
+.app-sidebar {
 	.flex-container {
 		display: flex;
 		flex-direction: column;
