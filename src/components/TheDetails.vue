@@ -22,52 +22,104 @@ License along with this library.  If not, see <http://www.gnu.org/licenses/>.
 <template>
 	<AppSidebar
 		:title="sidebarTitle"
-		:title-editable="true"
-		:starred="true"
+		:title-editable="editingTitle"
+		:linkify-title="true"
+		:empty="!task"
+		@start-editing="newTitle = task.summary"
+		@update:titleEditable="editTitle"
+		@update:title="updateTitle"
+		@submit-title="saveTitle"
 		@close="closeDetails()">
-		<div class="content-wrapper">
-			<div v-if="task"
-				:class="{'disabled': readOnly}"
-				class="flex-container">
-				<div :class="{'editing': edit=='summary'}" class="title">
-					<span class="detail-checkbox">
-						<input :id="'detailsToggleCompleted_' + task.uid"
-							type="checkbox"
-							class="checkbox"
-							name="detailsToggleCompleted"
-							:class="{'disabled': readOnly}"
-							:checked="task.completed"
-							:aria-checked="task.completed"
-							:disabled="readOnly"
-							:aria-label="$t('tasks', 'Task is completed')"
-							@click="toggleCompleted(task)">
-						<label :class="[checkboxColor]" :for="'detailsToggleCompleted_' + task.uid" />
-					</span>
-					<div v-click-outside="() => finishEditing('summary')" class="title-wrapper">
-						<div v-linkify="task.summary"
-							:class="{'strike-through': task.completed}"
-							class="title-text"
-							@click="editProperty('summary', $event)" />
-						<div class="expandable-container">
-							<div class="expandingArea active">
-								<pre><span>{{ tmpTask.summary }}</span><br></pre>
-								<textarea id="summaryInput"
-									v-model="tmpTask.summary"
-									maxlength="200"
-									@keyup.27="cancelEditing('summary')"
-									@keydown.enter.prevent="finishEditing('summary')" />
-							</div>
+		<!-- <template v-if="task" v-slot:primary-actions>
+			<TaskStatusDisplay :task="task" />
+			<ul class="sections">
+				<li v-show="!readOnly || task.start"
+					:class="{'date': task.startMoment.isValid(), 'editing': edit=='start', 'high': overdue(task.startMoment)}"
+					class="section detail-start">
+					<div v-click-outside="($event) => finishEditing('start', $event)"
+						class="section-content"
+						@click="editProperty('start', $event)">
+						<span class="section-icon">
+							<span :class="[startDateIcon(task.startMoment)]"
+								class="icon" />
+						</span>
+						<span class="section-title">
+							{{ startDateString }}
+						</span>
+						<div v-if="edit=='start'" class="section-edit">
+							<DatetimePicker :value="tmpTask.start.toDate()"
+								:lang="lang"
+								:format="dateFormat"
+								:clearable="false"
+								type="date"
+								:placeholder="$t('tasks', 'Set start date')"
+								class="date"
+								@change="setStartDate" />
+							<DatetimePicker v-if="!allDay"
+								:value="tmpTask.start.toDate()"
+								:lang="lang"
+								:format="timeFormat"
+								:clearable="false"
+								:time-picker-options="timePickerOptions"
+								type="time"
+								:placeholder="$t('tasks', 'Set start time')"
+								class="time"
+								@change="setStartTime" />
 						</div>
 					</div>
-					<TaskStatusDisplay :task="task" />
-					<button class="reactive inline" @click="togglePinned(task)">
-						<span :class="[{'disabled': readOnly}, iconPinned]" class="icon" />
-					</button>
-					<button class="reactive inline" @click="toggleStarred(task)">
-						<span :class="[{'disabled': readOnly}, iconStar]"
-							class="icon" />
-					</button>
-				</div>
+					<div class="section-utils">
+						<button class="inline reactive">
+							<span class="icon sprt-color sprt-checkmark-color" />
+						</button>
+						<button class="delete inline reactive" @click="setProperty('start', null)">
+							<span class="icon icon-sprt-bw sprt-trash" />
+						</button>
+					</div>
+				</li>
+			</ul>
+		</template> -->
+
+		<template v-slot:secondary-actions>
+			<ActionButton v-if="!readOnly"
+				:icon="task.pinned ? 'icon-pinned-off' : 'icon-pinned'"
+				@click="togglePinned(task)">
+				{{ task.pinned ? $t('tasks', 'Unpin') : $t('tasks', 'Pin') }}
+			</ActionButton>
+			<ActionButton
+				icon="icon-download">
+				{{ $t('tasks', 'Download') }}
+			</ActionButton>
+			<ActionButton v-if="!readOnly"
+				icon="icon-delete"
+				@click="removeTask">
+				{{ $t('tasks', 'Delete') }}
+			</ActionButton>
+		</template>
+
+		<template v-slot:tertiary-actions>
+			<span class="detail-checkbox">
+				<input :id="'detailsToggleCompleted_' + task.uid"
+					type="checkbox"
+					class="checkbox"
+					name="detailsToggleCompleted"
+					:class="{'disabled': readOnly}"
+					:checked="task.completed"
+					:aria-checked="task.completed"
+					:disabled="readOnly"
+					:aria-label="$t('tasks', 'Task is completed')"
+					@click="toggleCompleted(task)">
+				<label :class="[checkboxColor]" :for="'detailsToggleCompleted_' + task.uid" />
+			</span>
+		</template>
+
+		<AppSidebarTab v-if="task"
+			id="app-sidebar-tab-details"
+			class="app-sidebar-tab"
+			icon="icon-details"
+			:name="$t('tasks', 'Details')"
+			:order="0">
+			<div :class="{'disabled': readOnly}"
+				class="flex-container">
 				<div class="body">
 					<ul class="sections">
 						<li v-show="!readOnly || task.start"
@@ -340,6 +392,29 @@ License along with this library.  If not, see <http://www.gnu.org/licenses/>.
 								</div>
 							</div>
 						</li>
+					</ul>
+				</div>
+				<div class="footer">
+					<span v-tooltip="{
+							content: taskInfo,
+							html: true,
+						}"
+						class="info">
+						<span class="icon icon-info" />
+					</span>
+				</div>
+			</div>
+		</AppSidebarTab>
+		<AppSidebarTab v-if="task"
+			id="app-sidebar-tab-notes"
+			class="app-sidebar-tab"
+			icon="icon-note"
+			:name="$t('tasks', 'Notes')"
+			:order="1">
+			<div :class="{'disabled': readOnly}"
+				class="flex-container">
+				<div class="body">
+					<ul class="sections">
 						<li v-show="!readOnly || task.note" class="section detail-note">
 							<div class="section-content note">
 								<div v-click-outside="() => finishEditing('note')"
@@ -361,29 +436,28 @@ License along with this library.  If not, see <http://www.gnu.org/licenses/>.
 						</li>
 					</ul>
 				</div>
-				<div class="footer">
-					<button :style="{visibility: readOnly ? 'hidden' : 'visible'}"
-						class="close-all reactive inline"
-						@click="removeTask">
-						<span class="icon icon-sprt-bw sprt-trash" />
-					</button>
-					<span v-tooltip="{
-							content: taskInfo,
-							html: true,
-						}"
-						class="info">
-						<span class="icon icon-info" />
-					</span>
-					<button class="close-all reactive inline" @click="closeDetails">
-						<span class="icon icon-sprt-bw sprt-hide" />
-					</button>
-				</div>
 			</div>
-			<div v-else class="notice">
-				<span v-if="loading">{{ $t('tasks', 'Loading task from server.') }}</span>
-				<span v-else>{{ $t('tasks', 'Task not found!') }}</span>
-			</div>
-		</div>
+		</AppSidebarTab>
+		<AppSidebarTab v-if="task"
+			id="app-sidebar-tab-reminder"
+			class="app-sidebar-tab"
+			icon="icon-reminder"
+			:name="$t('tasks', 'Reminders')"
+			:order="2">
+			Reminders
+		</AppSidebarTab>
+		<AppSidebarTab v-if="task"
+			id="app-sidebar-tab-repeat"
+			class="app-sidebar-tab"
+			icon="icon-repeat"
+			:name="$t('tasks', 'Repeat')"
+			:order="3">
+			Repeat
+		</AppSidebarTab>
+		<EmptyContent v-else
+			:icon="taskStatusIcon">
+			{{ taskStatusLabel }}
+		</EmptyContent>
 	</AppSidebar>
 </template>
 
@@ -394,7 +468,10 @@ import TaskStatusDisplay from './TaskStatusDisplay'
 import { linkify } from '../directives/linkify.js'
 
 import moment from '@nextcloud/moment'
+import ActionButton from '@nextcloud/vue/dist/Components/ActionButton'
+import EmptyContent from '@nextcloud/vue/dist/Components/EmptyContent'
 import AppSidebar from '@nextcloud/vue/dist/Components/AppSidebar'
+import AppSidebarTab from '@nextcloud/vue/dist/Components/AppSidebarTab'
 import DatetimePicker from '@nextcloud/vue/dist/Components/DatetimePicker'
 import Multiselect from '@nextcloud/vue/dist/Components/Multiselect'
 import { mapGetters, mapActions } from 'vuex'
@@ -403,6 +480,9 @@ import ClickOutside from 'v-click-outside'
 export default {
 	components: {
 		AppSidebar,
+		AppSidebarTab,
+		ActionButton,
+		EmptyContent,
 		DatetimePicker,
 		Multiselect,
 		Markdown,
@@ -412,10 +492,9 @@ export default {
 		clickOutside: ClickOutside.directive,
 		linkify,
 	},
-	filters: {
-	},
 	data() {
 		return {
+			editingTitle: false,
 			loading: false,
 			edit: '',
 			tmpTask: {
@@ -451,11 +530,18 @@ export default {
 				{ displayName: this.$t('tasks', 'In process'), type: 'IN-PROCESS' },
 				{ displayName: this.$t('tasks', 'Canceled'), type: 'CANCELLED' },
 			],
+			newTitle: '',
 		}
 	},
 	computed: {
 		sidebarTitle() {
 			return this.task ? this.task.summary : ''
+		},
+		taskStatusLabel() {
+			return this.loading ? this.$t('tasks', 'Loading task from server.') : this.$t('tasks', 'Task not found!')
+		},
+		taskStatusIcon() {
+			return this.loading ? 'icon-loading' : 'icon-search'
 		},
 		/**
 		 * Whether we treat the task as read-only.
@@ -827,6 +913,26 @@ export default {
 				this.$nextTick(
 					() => document.getElementById(type + 'Input').focus()
 				)
+			}
+		},
+
+		editTitle(editing) {
+			if (this.readOnly) {
+				return
+			}
+			this.editingTitle = editing
+			if (this.editingTitle) {
+				this.newTitle = this.task.summary
+			}
+		},
+
+		updateTitle(title) {
+			this.newTitle = title
+		},
+
+		saveTitle() {
+			if (this.newTitle !== this.task.summary) {
+				this.setProperty('summary', this.newTitle)
 			}
 		},
 
